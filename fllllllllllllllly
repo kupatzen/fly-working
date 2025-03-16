@@ -1,0 +1,225 @@
+local player = game.Players.LocalPlayer
+local mouse = player:GetMouse()
+local userInputService = game:GetService("UserInputService")
+local runService = game:GetService("RunService")
+
+local speed = 50 -- default movement speed
+local flying = false
+local bv, bg -- BodyVelocity and BodyGyro for flight control
+local keys = {
+	W = false,
+	A = false,
+	S = false,
+	D = false,
+	Space = false,
+	Shift = false
+}
+
+-- Create the ScreenGui and main Frame
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FlyGui"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 200, 0, 150)
+frame.Position = UDim2.new(0.5, -100, 0.5, -75)
+frame.BackgroundColor3 = Color3.new(0, 0, 1) -- blue background
+frame.Active = true  -- allows dragging
+frame.Draggable = true
+frame.Parent = screenGui
+
+-- Create Fly button
+local flyButton = Instance.new("TextButton")
+flyButton.Name = "FlyButton"
+flyButton.Size = UDim2.new(0, 80, 0, 30)
+flyButton.Position = UDim2.new(0, 10, 0, 10)
+flyButton.Text = "Fly"
+flyButton.Parent = frame
+
+-- Create Unfly button
+local unflyButton = Instance.new("TextButton")
+unflyButton.Name = "UnflyButton"
+unflyButton.Size = UDim2.new(0, 80, 0, 30)
+unflyButton.Position = UDim2.new(0, 100, 0, 10)
+unflyButton.Text = "Unfly"
+unflyButton.Parent = frame
+
+-- Create Speed Increase button
+local incSpeedButton = Instance.new("TextButton")
+incSpeedButton.Name = "IncSpeedButton"
+incSpeedButton.Size = UDim2.new(0, 80, 0, 30)
+incSpeedButton.Position = UDim2.new(0, 10, 0, 50)
+incSpeedButton.Text = "+ Speed"
+incSpeedButton.Parent = frame
+
+-- Create Speed Decrease button
+local decSpeedButton = Instance.new("TextButton")
+decSpeedButton.Name = "DecSpeedButton"
+decSpeedButton.Size = UDim2.new(0, 80, 0, 30)
+decSpeedButton.Position = UDim2.new(0, 100, 0, 50)
+decSpeedButton.Text = "- Speed"
+decSpeedButton.Parent = frame
+
+-- Display current speed
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Name = "SpeedLabel"
+speedLabel.Size = UDim2.new(0, 180, 0, 30)
+speedLabel.Position = UDim2.new(0, 10, 0, 90)
+speedLabel.Text = "Speed: " .. speed
+speedLabel.BackgroundTransparency = 1
+speedLabel.Parent = frame
+
+local heartbeatConnection
+
+-- This function calculates and updates the flying velocity
+local function updateFly()
+	-- Ensure the character and its HumanoidRootPart exist
+	if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+	local hrp = player.Character.HumanoidRootPart
+	local cam = workspace.CurrentCamera
+	local forward = cam.CFrame.lookVector
+	local right = cam.CFrame.rightVector
+
+	local moveVector = Vector3.new(0, 0, 0)
+	if keys.W then
+		moveVector = moveVector + forward
+	end
+	if keys.S then
+		moveVector = moveVector - forward
+	end
+	if keys.A then
+		moveVector = moveVector - right
+	end
+	if keys.D then
+		moveVector = moveVector + right
+	end
+	if keys.Space then
+		moveVector = moveVector + Vector3.new(0, 1, 0)
+	end
+	if keys.Shift then
+		moveVector = moveVector - Vector3.new(0, 1, 0)
+	end
+
+	-- Avoid error on zero vector unit conversion
+	if moveVector.Magnitude > 0 then
+		moveVector = moveVector.Unit * speed
+	end
+
+	-- Update BodyVelocity and BodyGyro if they exist
+	if bv then
+		bv.Velocity = moveVector
+	end
+	if bg then
+		bg.CFrame = CFrame.new(hrp.Position, hrp.Position + cam.CFrame.LookVector * 50)
+	end
+end
+
+-- Start flying by adding physics controllers to the character
+local function startFlying()
+	if flying then return end
+	if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+	flying = true
+	local hrp = player.Character.HumanoidRootPart
+
+	-- Disable standard movement physics
+	if player.Character:FindFirstChildOfClass("Humanoid") then
+		player.Character:FindFirstChildOfClass("Humanoid").PlatformStand = true
+	end
+
+	-- Create and configure BodyGyro to control rotation
+	bg = Instance.new("BodyGyro")
+	bg.P = 90000
+	bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+	bg.CFrame = hrp.CFrame
+	bg.Parent = hrp
+
+	-- Create and configure BodyVelocity to control movement
+	bv = Instance.new("BodyVelocity")
+	bv.Velocity = Vector3.new(0, 0, 0)
+	bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+	bv.Parent = hrp
+
+	-- Use Heartbeat to update movement continuously
+	heartbeatConnection = runService.Heartbeat:Connect(function()
+		updateFly()
+	end)
+end
+
+-- Stop flying and remove physics controllers
+local function stopFlying()
+	if not flying then return end
+	flying = false
+	if heartbeatConnection then
+		heartbeatConnection:Disconnect()
+		heartbeatConnection = nil
+	end
+	if bv then
+		bv:Destroy()
+		bv = nil
+	end
+	if bg then
+		bg:Destroy()
+		bg = nil
+	end
+	if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+		player.Character:FindFirstChildOfClass("Humanoid").PlatformStand = false
+	end
+end
+
+-- Connect button clicks to their respective functions
+flyButton.MouseButton1Click:Connect(function()
+	startFlying()
+end)
+
+unflyButton.MouseButton1Click:Connect(function()
+	stopFlying()
+end)
+
+incSpeedButton.MouseButton1Click:Connect(function()
+	speed = speed + 10
+	speedLabel.Text = "Speed: " .. speed
+end)
+
+decSpeedButton.MouseButton1Click:Connect(function()
+	if speed - 10 >= 0 then
+		speed = speed - 10
+		speedLabel.Text = "Speed: " .. speed
+	end
+end)
+
+-- Listen for key inputs to handle flight directional movement
+userInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.W then keys.W = true end
+	if input.KeyCode == Enum.KeyCode.A then keys.A = true end
+	if input.KeyCode == Enum.KeyCode.S then keys.S = true end
+	if input.KeyCode == Enum.KeyCode.D then keys.D = true end
+	if input.KeyCode == Enum.KeyCode.Space then keys.Space = true end
+	if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+		keys.Shift = true
+	end
+end)
+
+userInputService.InputEnded:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.W then keys.W = false end
+	if input.KeyCode == Enum.KeyCode.A then keys.A = false end
+	if input.KeyCode == Enum.KeyCode.S then keys.S = false end
+	if input.KeyCode == Enum.KeyCode.D then keys.D = false end
+	if input.KeyCode == Enum.KeyCode.Space then keys.Space = false end
+	if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+		keys.Shift = false
+	end
+end)
+
+-- Reset flight state on character respawn
+player.CharacterAdded:Connect(function(character)
+	wait(1)
+	-- Ensure the humanoid is loaded
+	local hum = character:WaitForChild("Humanoid")
+	hum.PlatformStand = false
+	-- Reset key states
+	keys = {W = false, A = false, S = false, D = false, Space = false, Shift = false}
+end)
